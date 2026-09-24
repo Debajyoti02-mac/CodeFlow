@@ -1,0 +1,18 @@
+codeforge/
+│
+├── app/
+│   ├── main.py
+│   ├── agent.py
+│   ├── state.py
+│   │
+│   └── tools/
+│       ├── __init__.py
+│       ├── files.py
+│       └── terminal.py
+│
+├── workspace/
+│
+├── .env
+├── .gitignore
+├── requirements.txt
+└── README.md

@@ -1,0 +1,26 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Local database
+*.db
+*.sqlite
+*.sqlite3
+
+# Agent workspace
+workspace/
+
+# OS
+.DS_Store
