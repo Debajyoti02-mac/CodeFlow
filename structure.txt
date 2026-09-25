@@ -16,3 +16,6 @@ codeforge/
 ├── .gitignore
 ├── requirements.txt
 └── README.md
+
+
+uv run uvicorn main:app --reload

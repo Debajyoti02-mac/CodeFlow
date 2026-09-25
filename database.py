@@ -14,7 +14,8 @@ class Base(DeclarativeBase):
 # Database create 
 class SQL_base(Base):
     __tablename__="Database"
-    user_id = Column(Integer , autoincrement=True , primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=True)
     question = Column(String)
     limit = Column(Integer)
     answer = Column(String)
