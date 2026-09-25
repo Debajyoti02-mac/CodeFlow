@@ -1,12 +1,22 @@
-from fastapi import FastAPI , HTTPException , Depends 
+from fastapi import FastAPI , HTTPException , Depends , Request 
 from database import SQL_base , create_db
 from agent import graph
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage 
 from logger import logger
 
+# Rate limiter 
+from slowapi import Limiter 
+from slowapi.util import get_remote_address 
+from slowapi.errors import RateLimitExceeded 
+from slowapi import _rate_limit_exceeded_handler 
+
+limiter = Limiter(key_func=get_remote_address)
+
 # Conection build 
 app = FastAPI(title = "API_system")
+app.state.limiter = limiter 
+app.add_exception_handler(RateLimitExceeded , _rate_limit_exceeded_handler)
 
 # Data Define 
 class API(BaseModel):
@@ -58,7 +68,8 @@ def fetch(db=Depends(create_db)):
 import time 
 # Post connection 
 @app.post("/chat")
-def asking(response:API , db=Depends(create_db)):
+@limiter.limit("10/minute")
+def asking(request:Request , response:API , db=Depends(create_db)):
     
     logger.info("chat request recived")
     try:

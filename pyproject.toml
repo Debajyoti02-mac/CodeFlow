@@ -13,5 +13,6 @@ dependencies = [
     "langgraph>=1.2.12",
     "numexpr>=2.14.2",
     "python-dotenv>=1.2.3",
+    "slowapi>=0.1.10",
     "uvicorn>=0.53.0",
 ]
