@@ -85,3 +85,54 @@ def git_add(files:str):
     except Exception as e :
         logger.error(f"Git add error: {e}")
         return str(e)
+    
+@tool
+def git_commit(message:str):
+    """Commit staged changes with the given commit message."""
+    logger.info(f'git commit : {message}')
+    try:
+        if not message.strip():
+            return "Commit message cannot be empty."
+
+        result = subprocess.run(
+            ["git", "commit", "-m", message],
+            capture_output=True,
+            text=True,
+            cwd=".",
+            timeout=30
+        )
+
+        if result.returncode != 0:
+            logger.error(f"Git commit error: {result.stderr}")
+            return result.stderr
+
+        logger.info("git commit complete")
+        return result.stdout
+
+    except Exception as e:
+        logger.error(f"Git commit error: {e}")
+        return str(e)
+    
+@tool 
+def git_push():
+    """Push committed changes to the remote Git repository."""
+    logger.info("push the code into the directory")
+    
+    try:
+        result = subprocess.run(
+            ["git", "push"],
+            capture_output=True,
+            text=True,
+            cwd=".",
+            timeout=60
+        )
+
+        if result.returncode!=0:
+            logger.error(f'git push error : {result.stderr}')
+            return result.stderr
+        logger.info("git push complete")
+        return result.stdout if result.stdout else result.stderr
+
+    except Exception as e:
+        logger.error(f"Git push error: {e}")
+        return str(e)

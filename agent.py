@@ -2,7 +2,8 @@ import os
 import numexpr as ne
 from logger import logger
 from langchain_core.tools import tool
-from git_tools import git_status , git_diff , git_log
+from git_tools import git_status , git_diff , git_log , git_add , git_commit , git_push 
+from code_search import code_search
 
 # Calculator Tool
 @tool
@@ -173,7 +174,7 @@ from langgraph.graph.message import add_messages , Annotated
 from typing import TypedDict 
 
 # all tools
-tools = [calculator , file_handler , list_files , terminal , git_status , git_diff , git_log]
+tools = [calculator , file_handler , list_files , terminal , git_status , git_diff , git_log , git_add , git_commit , git_push , code_search]
 
 # State create  
 class state(TypedDict):
@@ -211,5 +212,8 @@ Builder.add_edge("tools", "conection")
 
 # Complete graph building 
 graph = Builder.compile()
-
-print(git_log.invoke({}))
+from langchain_core.messages import HumanMessage
+response = graph.invoke({'messages':[HumanMessage(
+    content="Search my codebase and find where database sessions are created."
+)]})
+print(response['messages'][-1].content)

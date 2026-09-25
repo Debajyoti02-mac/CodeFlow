@@ -1,3 +1,4 @@
+# all module imports 
 from fastapi import FastAPI , HTTPException , Depends , Request 
 from database import SQL_base , create_db
 from agent import graph
@@ -49,7 +50,6 @@ def delete_question(id : int , db=Depends(create_db)):
         'status':'delete',
         'delete':delete
     }
-
 
 #Get method     
 @app.get("/ask")
