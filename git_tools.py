@@ -60,3 +60,28 @@ def git_log():
     except Exception as e:
         logger.error(f"Git log error: {e}")
         return str(e)
+    
+@tool 
+def git_add(files:str):
+    """Stage specified files for the next Git commit."""
+    logger.info(f"git add : {files}")
+    try :
+        file= files.split()
+        if not file:
+            return "No file specific"
+        
+        result = subprocess.run(
+            ['git','add'] + file,
+            capture_output=True , 
+            text=True , 
+            cwd='.',
+            timeout=30 
+        )
+        if result.returncode!=0:
+            logger.error(f'git add error{result.stderr}')
+            return result.stderr 
+        logger.info("git add complete")
+        return f'files stages : {files}'
+    except Exception as e :
+        logger.error(f"Git add error: {e}")
+        return str(e)
