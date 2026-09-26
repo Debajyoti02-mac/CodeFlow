@@ -62,31 +62,39 @@ def git_log():
         logger.error(f"Git log error: {e}")
         return str(e)
     
-@tool 
-def git_add(files:str):
-    """Stage specified files for the next Git commit."""
-    logger.info(f"git add : {files}")
-    try :
-        file= files.split()
-        if not file:
-            return "No file specific"
-        
-        result = subprocess.run(
-            ['git','add'] + file,
-            capture_output=True , 
-            text=True , 
-            cwd='.',
-            timeout=30 
-        )
-        if result.returncode!=0:
-            logger.error(f'git add error{result.stderr}')
-            return result.stderr 
-        logger.info("git add complete")
-        return f'files stages : {files}'
-    except Exception as e :
-        logger.error(f"Git add error: {e}")
-        return str(e)
-    
+from pathlib import Path
+
+
+@tool
+def git_add(files: str):
+  """Stage specified files or everything for Git commit."""
+  logger.info(f"git add : {files}")
+  try:
+    if files.strip() == ".":
+      cmd = ["git", "add", "."]
+    else:
+      file_list = files.split()
+      actual_paths = []
+      for f in file_list:
+        # Search if the file is inside workspace or root
+        matches = list(Path(".").rglob(f))
+        if matches:
+          actual_paths.append(str(matches[0]))
+        else:
+          actual_paths.append(f)
+
+      cmd = ["git", "add"] + actual_paths
+
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, cwd=".", timeout=30
+    )
+    if result.returncode != 0:
+      return f"Git add error: {result.stderr.strip()}"
+
+    return f"Files staged successfully: {' '.join(actual_paths if files.strip() != '.' else ['.'])}"
+  except Exception as e:
+    return f"Git add error: {str(e)}"
+
 @tool
 def git_commit(message:str):
     """Commit staged changes with the given commit message."""

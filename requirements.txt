@@ -16,3 +16,6 @@ pypdf
 duckduckgo-search
 ddgs
 
+pypdf
+duckduckgo-search
+ddgs
