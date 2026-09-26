@@ -20,3 +20,4 @@ pypdf
 duckduckgo-search
 ddgs
 langchain-community
+langchain-community
