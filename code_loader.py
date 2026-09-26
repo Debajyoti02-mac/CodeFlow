@@ -1,62 +1,42 @@
-# Basic path loader 
 from pathlib import Path
-from langchain_text_splitters import RecursiveCharacterTextSplitter 
 import chromadb
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-def load_files():
-    files = []
-    for file in Path(".").glob("*.py"):
-        files.append({
+splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+
+
+def load_code_chunks():
+  chunks = []
+  # Recursively find .py files, ignoring virtual environments and cache
+  for file in Path(".").rglob("*.py"):
+    if any(p in file.parts for p in (".venv", "venv", "__pycache__")):
+      continue
+    try:
+      content = file.read_text(encoding="utf-8", errors="ignore")
+      for i, piece in enumerate(splitter.split_text(content)):
+        chunks.append({
+            "id": f"{file}_{i}",
             "file": str(file),
-            "content": file.read_text()
+            "content": piece,
         })
-    return files
+    except Exception:
+      pass
+  return chunks
 
-text_spliter = RecursiveCharacterTextSplitter(chunk_size=1000 , chunk_overlap=150)
 
 if __name__ == "__main__":
-    docs = load_files()
+  chunks = load_code_chunks()
+  if not chunks:
+    print("No Python files found.")
+    exit()
 
-    chunks = []
-    
-    for doc in docs:
-        file_chunks = text_spliter.split_text(doc['content'])
-        
-        for chunk in file_chunks:
-            chunks.append({
-                'file':doc['file'],
-                'content':chunk
-            })
+  client = chromadb.PersistentClient(path="./CodeFlowDB")
+  collection = client.get_or_create_collection(name="code")
 
-    client = chromadb.PersistentClient(path="./CodeFlowDB")
+  collection.upsert(
+      ids=[c["id"] for c in chunks],
+      documents=[c["content"] for c in chunks],
+      metadatas=[{"file": c["file"]} for c in chunks],
+  )
 
-    collection = client.get_or_create_collection(
-    name="code"
-    )
-    documents = [chunk["content"] for chunk in chunks]
-
-    ids = [str(i) for i in range(len(chunks))]
-
-    metadatas = [
-    {"file": chunk["file"]}
-    for chunk in chunks
-]
-
-    collection.upsert(
-    documents=documents,
-    ids=ids,
-    metadatas=metadatas
-)
-    results = collection.query(
-    query_texts=["where is git commit implemented?"],
-    n_results=3
-)
-
-    print(results["documents"])
-
-    print("Stored:", collection.count())
-    print("total chunks ", len(chunks))
-    print(chunks[0])
-        
-
-
+  print(f"Indexed {len(chunks)} chunks into CodeFlowDB.")

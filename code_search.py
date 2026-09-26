@@ -42,8 +42,10 @@ def code_search(query: str):
                 f"File: {metadata['file']}\n"
                 f"Code:\n{document}"
             )
+            if not output:
+                return "No matching code found in codebase."
 
-        return "\n\n---\n\n".join(output)
+            return "\n\n---\n\n".join(output)
 
     except Exception as e:
         return f"Code search error: {e}"

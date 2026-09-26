@@ -19,7 +19,16 @@ class SQL_base(Base):
     question = Column(String)
     limit = Column(Integer)
     answer = Column(String)
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String, unique=True, nullable=False)
+    password = Column(String, nullable=False)
+    
 Base.metadata.create_all(bind=engine)
+
+
 
 # Create connections 
 def create_db():

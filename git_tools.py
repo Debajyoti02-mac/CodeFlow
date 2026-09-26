@@ -8,36 +8,37 @@ def git_status():
     logger.info("git status called")
     try:
         result = subprocess.run(
-            ["git","status","--short"],
+            ["git", "status", "--short"],
             capture_output=True,
-            text=True , 
-            cwd="workspace",
+            text=True, 
+            cwd=".",
             timeout=30
         )
         logger.info("Git status completed")
-
-        return result.stdout if result.stdout else "Working tree clean."
+        out = (result.stdout or "").strip()
+        return out if out else "Working tree clean. No uncommitted changes."
     except Exception as e:
         logger.error(f"Git status error: {e}")
-        return str(e)
+        return f"Git status error: {str(e)}"
 
 @tool 
 def git_diff():
     """ show changes made to the project """
     logger.info("Git Diff called")
-    try :
+    try:
         result = subprocess.run(
-            ['git','diff'],
-            capture_output=True , 
-            text=True , 
-            cwd="workspace",
+            ['git', 'diff'],
+            capture_output=True, 
+            text=True, 
+            cwd=".",
             timeout=30
         )
         logger.info("git diff complete")
-        return result.stdout if result.stdout else "No changes ."
+        out = (result.stdout or "").strip()
+        return out if out else "No changes detected (git diff is empty)."
     
-    except Exception as e :
-        return str(e)
+    except Exception as e:
+        return f"Git diff error: {str(e)}"
     
 @tool 
 def git_log():
@@ -113,26 +114,36 @@ def git_commit(message:str):
         logger.error(f"Git commit error: {e}")
         return str(e)
     
-@tool 
-def git_push():
-    """Push committed changes to the remote Git repository."""
-    logger.info("push the code into the directory")
-    
-    try:
-        result = subprocess.run(
-            ["git", "push"],
-            capture_output=True,
-            text=True,
-            cwd=".",
-            timeout=60
-        )
+@tool
+def git_push(remote: str = "origin", branch: str = ""):
+  """Push committed changes to the remote Git repository.
 
-        if result.returncode!=0:
-            logger.error(f'git push error : {result.stderr}')
-            return result.stderr
-        logger.info("git push complete")
-        return result.stdout if result.stdout else result.stderr
+  Args:
+      remote: Remote repository name (default 'origin').
+      branch: Branch name (e.g., 'main'). If empty, pushes current branch.
+  """
+  logger.info(f"git push called: {remote} {branch}")
+  try:
+    # Use -u remote HEAD if no branch is specified
+    cmd = ["git", "push", "-u", remote, branch] if branch else [
+        "git",
+        "push",
+        "-u",
+        remote,
+        "HEAD",
+    ]
 
-    except Exception as e:
-        logger.error(f"Git push error: {e}")
-        return str(e)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, cwd=".", timeout=60
+    )
+
+    if result.returncode != 0:
+      logger.error(f"git push error: {result.stderr}")
+      return f"Push failed: {result.stderr.strip()}"
+
+    logger.info("git push complete")
+    return result.stdout or "Successfully pushed to remote."
+
+  except Exception as e:
+    logger.error(f"Git push error: {e}")
+    return str(e)

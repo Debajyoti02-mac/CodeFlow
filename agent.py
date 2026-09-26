@@ -1,86 +1,40 @@
 import os
-import numexpr as ne
-from logger import logger
-from langchain_core.tools import tool
-from git_tools import git_status , git_diff , git_log , git_add , git_commit , git_push 
-from code_search import code_search
-
-# Calculator Tool
-@tool
-def calculator(expression: str):
-    """Calculate a mathematical expression."""
-    logger.info(f'the calculator called : {expression}')
-    try:
-        result = ne.evaluate(expression)
-        return result.item()
-    except Exception as e:
-        logger.info(f'the error is :{str(e)}')
-        return str(e)
-
-from pathlib import Path 
-workspace = Path("workspace").resolve()
-
-def safe_path(filename:str):
-    path= (workspace/filename).resolve()
-    
-    if not path.is_relative_to(workspace):
-        raise ValueError("access denied ")
-    return path 
-
-# File Operation Tool
-@tool
-def file_handler(filename: str,operation: str,content: str = ""):
-    """
-    Handles basic file operations such as create, read, append, and delete.
-    """
-    logger.info(f"File tool called: {operation} -> {filename}")
-    try:
-        path = safe_path(filename)
-        def is_sensitive_file(path):
-            return path.name in SENSITIVE_FILES
-        if is_sensitive_file(path):
-            logger.warning(f"Blocked sensitive file access: {filename}")
-            return "Access denied: sensitive file"
-        if operation == "read":
-            with open(filename, "r") as file:
-                return file.read()
-        elif operation == "create":
-            with open(filename, "w") as file:
-                file.write(content)
-            return f"File created: {filename}"
-        elif operation == "append":
-            with open(filename, "a") as file:
-                file.write(content)
-            return f"Content added to: {filename}"
-        elif operation == "delete":
-            if os.path.exists(filename):
-                os.remove(filename)
-                return f"File deleted: {filename}"
-            return "File not found."
-        else:
-            return "Invalid operation."
-    except Exception as e:
-        logger.error(f"File tool error: {e}")
-        return str(e)
-
-# List of file return 
-@tool
-def list_files(path: str = "workspace"):
-    """List all files and folders inside the given directory."""
-    logger.info(f"List files called: {path}")
-    try:
-        return os.listdir(path)
-    except Exception as e:
-        return str(e)
-    
-# terminal add 
-import subprocess
 import shlex
+import subprocess
 from pathlib import Path
-
+from typing import Annotated, Literal, TypedDict
+from pypdf import PdfReader
+from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
-from logger import logger
+from langchain_groq import ChatGroq
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import InjectedState, ToolNode, tools_condition
+import numexpr as ne
+from langchain_community.tools import DuckDuckGoSearchResults
+from code_search import code_search
+from git_tools import (
+    git_add,
+    git_commit,
+    git_diff,
+    git_log,
+    git_push,
+    git_status,
+)
+from logger import logger 
 
+# Ensure base workspace exists
+Path("workspace").mkdir(parents=True, exist_ok=True) 
+
+# 1. Constants 
+SENSITIVE_FILES = {
+    ".env",
+    ".env.local",
+    ".env.production",
+    "credentials.json",
+    "secrets.json",
+}
 
 ALLOWED_COMMANDS = {
     "ls",
@@ -91,129 +45,260 @@ ALLOWED_COMMANDS = {
     "touch",
     "python",
 }
+# 1. Websearch 
+from langchain_community.tools import DuckDuckGoSearchResults
+from langchain_core.tools import tool
+
+ddg_search = DuckDuckGoSearchResults()
 
 
-SENSITIVE_FILES = {
-    ".env",
-    ".env.local",
-    ".env.production",
-    "credentials.json",
-    "secrets.json",
-}
+@tool
+def web_search(query: str):
+  """Search the web for up-to-date information, news, documentation, or facts
+
+  not found in the local workspace.
+  """
+  try:
+    results = ddg_search.run(query)
+    return results if results else "No web results found."
+  except Exception as e:
+    return f"Web search error: {str(e)}"
 
 
+# 2. Calculator Tool
+@tool
+def calculator(expression: str):
+  """Calculate a mathematical expression."""
+  logger.info(f"the calculator called : {expression}")
+  try:
+    result = ne.evaluate(expression)
+    return result.item()
+  except Exception as e:
+    logger.info(f"the error is :{str(e)}")
+    return str(e)
+
+# 3. File Operation Tool
+@tool
+def file_handler(
+    filename: str,
+    operation: Literal["create", "read", "append", "delete"],
+    content: str = "",
+    user_id: Annotated[int, InjectedState("user_id")] = None,
+):
+  """Manage files for the authenticated user.
+
+  Args:
+      filename: Name or relative path of the file.
+      operation: Action to perform ('create', 'read', 'append', or 'delete').
+      content: Text to write (used for 'create' and 'append').
+  """
+  try:
+    if user_id is None:
+      return "User authentication required."
+
+    user_workspace = (
+        Path("workspace") / str(user_id) / "generated"
+    ).resolve()
+    user_workspace.mkdir(parents=True, exist_ok=True)
+
+    path = (user_workspace / filename).resolve()
+
+    if not path.is_relative_to(user_workspace):
+      return "Access denied."
+
+    if path.name in SENSITIVE_FILES:
+      return "Access denied: sensitive file"
+
+    if operation == "read":
+      if not path.exists():
+        return f"File not found: {filename}"
+
+          # Handle PDF files
+      if path.suffix.lower() == ".pdf":
+        try:
+          reader = PdfReader(path)
+          extracted = "\n".join(
+                  [page.extract_text() or "" for page in reader.pages]
+              )
+          return (
+                  extracted.strip()
+              if extracted.strip()
+              else "PDF contains no readable text."
+              )
+        except Exception as e:
+              return f"Error reading PDF: {e}"
+
+          # Handle text files
+      with open(path, "r", encoding="utf-8", errors="ignore") as file:
+        data = file.read()
+        return data if data else "File is empty."
+
+
+    elif operation == "create":
+      with open(path, "w") as file:
+        file.write(content)
+      return f"File created: {filename}"
+
+    elif operation == "append":
+      with open(path, "a") as file:
+        file.write(content)
+      return f"Content added: {filename}"
+
+    elif operation == "delete":
+      if path.exists():
+        path.unlink()
+        return f"File deleted: {filename}"
+      return "File not found."
+
+    return "Invalid operation."
+
+  except Exception as e:
+    logger.error(f"File tool error: {e}")
+    return str(e)
+
+# 4. List Files Tool
+@tool
+def list_files(user_id: Annotated[int, InjectedState("user_id")] = None):
+  """List all files uploaded in the user's workspace."""
+  if user_id is None:
+    return "User authentication required."
+
+  user_workspace = Path("workspace") / str(user_id) / "generated"
+  if not user_workspace.exists():
+    return "No files uploaded yet."
+
+  files = [f for f in os.listdir(user_workspace) if not f.startswith(".")]
+  return (
+      f"Files in user workspace: {files}"
+      if files
+      else "No files in user workspace."
+  )
+
+
+
+# 5. Terminal Tool
 def is_safe_command(command: str):
-    if ".." in command:
-        return False
-
-    if command.startswith("/"):
-        return False
-
-    return True
+  return ".." not in command and not command.startswith("/")
 
 
 def is_sensitive_file(path: str):
-    return Path(path).name in SENSITIVE_FILES
+  return Path(path).name in SENSITIVE_FILES
 
 
 @tool
 def terminal(command: str):
-    """Execute a terminal command inside the CodeFlow workspace."""
+  """Execute a terminal command inside the CodeFlow workspace."""
+  logger.info(f"Terminal tool called: {command}")
 
-    logger.info(f"Terminal tool called: {command}")
+  try:
+    parts = shlex.split(command)
+    if not parts:
+      return "Empty command."
 
-    try:
-        parts = shlex.split(command)
+    if parts[0] not in ALLOWED_COMMANDS:
+      logger.warning(f"Blocked terminal command: {command}")
+      return f"Command not allowed: {parts[0]}"
 
-        if not parts:
-            return "Empty command."
+    if not is_safe_command(command):
+      logger.warning(f"Blocked unsafe command: {command}")
+      return "Access denied: unsafe path"
 
-        # 1. Command allowlist
-        if parts[0] not in ALLOWED_COMMANDS:
-            logger.warning(f"Blocked terminal command: {command}")
-            return f"Command not allowed: {parts[0]}"
+    for part in parts[1:]:
+      if is_sensitive_file(part):
+        logger.warning(f"Blocked sensitive file access: {part}")
+        return "Access denied: sensitive file"
 
-        # 2. Path traversal / absolute path
-        if not is_safe_command(command):
-            logger.warning(f"Blocked unsafe command: {command}")
-            return "Access denied: unsafe path"
+    result = subprocess.run(
+        parts, capture_output=True, text=True, cwd="workspace", timeout=30
+    )
 
-        # 3. Sensitive file protection
-        for part in parts[1:]:
-            if is_sensitive_file(part):
-                logger.warning(f"Blocked sensitive file access: {part}")
-                return "Access denied: sensitive file"
+    logger.info("Terminal tool completed")
+    output = (result.stdout or "").strip()
+    errors = (result.stderr or "").strip()
 
-        result = subprocess.run(
-            parts,
-            capture_output=True,
-            text=True,
-            cwd="workspace",
-            timeout=30
-        )
+    if output:
+      return output
+    if errors:
+      return errors
+    return "Command executed successfully (no output)."
 
-        logger.info("Terminal tool completed")
+  except Exception as e:
+    logger.error(f"Terminal tool error: {e}")
+    return str(e)
 
-        return result.stdout if result.stdout else result.stderr
-
-    except Exception as e:
-        logger.error(f"Terminal tool error: {e}")
-        return str(e)
-    
-# LLM 
-from langchain_groq import ChatGroq 
-import os 
-from dotenv import load_dotenv 
+# 6. LLM Setup
 load_dotenv()
-key = os.getenv('GROQ_API_KEY')
-LLM = ChatGroq(model="openai/gpt-oss-120b",api_key=key)
+key = os.getenv("GROQ_API_KEY")
+LLM = ChatGroq(model="openai/gpt-oss-120b", api_key=key)
 
-# LLM conection with the langGraph 
-from langgraph.graph import START , StateGraph , END 
-from langgraph.graph.message import add_messages , Annotated 
-from typing import TypedDict 
+tools = [
+    calculator,
+    file_handler,
+    list_files,
+    terminal,
+    git_status,
+    git_diff,
+    git_log,
+    git_add,
+    git_commit,
+    git_push,
+    code_search,
+    web_search
+]
 
-# all tools
-tools = [calculator , file_handler , list_files , terminal , git_status , git_diff , git_log , git_add , git_commit , git_push , code_search]
 
-# State create  
-class state(TypedDict):
-    messages : Annotated[list,add_messages]
+# 7. State and Graph
+class State(TypedDict):
+  messages: Annotated[list, add_messages]
+  user_id: int
 
-# llm state contention  
-tool_blind = LLM.bind_tools(tools=tools)
 
-#tool connection 
-def tool_connection(state:state):
-    logger.info("Tool connection started")
-    try :
-        response = tool_blind.invoke(state['messages'])
-        logger.info("tool conection complete")
-        return {'messages':response} 
-    except Exception as e :
-        logger.error(f"Tool connection error: {e}")
-        return str(e)
-        
-from langgraph.graph import StateGraph, START, END
-from langgraph.prebuilt import ToolNode, tools_condition
+tool_bound = LLM.bind_tools(tools=tools)
+from langchain_core.messages import SystemMessage
+SYSTEM_PROMPT = SystemMessage(
+    content=(
+        "You are an assistant with access to user workspace files. "
+        "When the user asks to read, review, or summarize 'my file' or 'my pdf' without specifying a name, "
+        "always call list_files first to find what they uploaded, then call file_handler with operation='read'."
+    )
+)
 
-Builder = StateGraph(state)
+def tool_connection(state: State):
+  logger.info("Tool connection started")
 
-Builder.add_node("conection", tool_connection)
+  # Add SYSTEM_PROMPT to the front of the messages list
+  messages = [SYSTEM_PROMPT] + state["messages"]
+
+  response = tool_bound.invoke(messages)
+  logger.info("tool connection complete")
+  return {"messages": [response]}
+
+
+Builder = StateGraph(State)
+Builder.add_node("connection", tool_connection)
 Builder.add_node("tools", ToolNode(tools))
 
-Builder.add_edge(START, "conection")
+Builder.add_edge(START, "connection")
+Builder.add_conditional_edges("connection", tools_condition)
+Builder.add_edge("tools", "connection")
 
-Builder.add_conditional_edges(
-    "conection",
-    tools_condition
-)
-Builder.add_edge("tools", "conection")
-
-# Complete graph building 
 graph = Builder.compile()
-from langchain_core.messages import HumanMessage
-response = graph.invoke({'messages':[HumanMessage(
-    content="Search my codebase and find where database sessions are created."
-)]})
-print(response['messages'][-1].content)
+
+# 8. Execution with recursion_limit to stop loops
+if __name__ == "__main__":
+  response = graph.invoke(
+      {
+          "messages": [
+              HumanMessage(
+                  content=(
+                      "Create a file called test_auth.py containing"
+                      " print('hello')"
+                  )
+              )
+          ],
+          "user_id": 6,
+      },
+      config={"recursion_limit": 10},
+  )
+
+  print(response["messages"][-1].content)
