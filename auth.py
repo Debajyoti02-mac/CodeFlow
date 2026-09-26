@@ -3,9 +3,13 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import jwt
 from pwdlib import PasswordHash
+from pwdlib.hashers.bcrypt import BcryptHasher
+
+
+
 
 SECRET_KEY, ALGORITHM = "change-this-later", "HS256"
-pwd = PasswordHash.recommended()
+pwd = PasswordHash((BcryptHasher(),))
 security = HTTPBearer()
 
 # Password helpers
