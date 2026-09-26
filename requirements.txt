@@ -22,3 +22,4 @@ ddgs
 langchain-community
 langchain-community
 argon2-cffi
+python-multipart
