@@ -7,9 +7,18 @@ from jose import jwt
 from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+
+print("SECRET KEY LOADED:", bool(SECRET_KEY)) 
+
 
 pwd = PasswordHash((BcryptHasher(),))
 security = HTTPBearer()
